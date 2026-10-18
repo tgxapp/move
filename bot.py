@@ -52,7 +52,6 @@ def call(token, method, payload=None, timeout=40):
 
 def listen(token):
     label = token.split(":", 1)[0]
-    call(token, "deleteWebhook")
     offset = None
     print(f"Bot {label} menyala. Menunggu pesan...")
 
