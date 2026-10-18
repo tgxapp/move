@@ -1,67 +1,70 @@
+import asyncio
 import json
 import os
 from http.server import BaseHTTPRequestHandler
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
+
+WEBHOOK_URL = "https://move-omega-one.vercel.app/api/telegram"
 TEXT = (
     "<b>Pemberitahuan layanan</b>\n\n"
     "Bot ini akan diistirahatkan.\n"
     "Silakan melanjutkan melalui bot baru dengan menekan tombol di bawah.\n\n"
     "Seluruh data Anda telah dipindahkan secara otomatis."
 )
-BUTTON = {
-    "inline_keyboard": [
-        [{"text": "Buka bot baru", "url": "https://t.me/tgXapp_bot?start=hallo"}]
-    ]
-}
+KEYBOARD = InlineKeyboardMarkup(
+    [[InlineKeyboardButton("Buka bot baru", url="https://t.me/tgXapp_bot?start=hallo")]]
+)
 
 
 def tokens():
-    raw = os.environ.get("BOT_TOKEN", "")
-    return [part.strip() for part in raw.split(",") if part.strip()]
+    return [part.strip() for part in os.environ.get("BOT_TOKEN", "").split(",") if part.strip()]
 
 
-def send(token, chat_id):
-    payload = json.dumps(
-        {
-            "chat_id": chat_id,
-            "text": TEXT,
-            "parse_mode": "HTML",
-            "reply_markup": BUTTON,
-        }
-    ).encode()
-    request = Request(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-    with urlopen(request, timeout=10) as response:
-        data = json.loads(response.read().decode())
-    return bool(data.get("ok"))
+async def register_webhooks():
+    for token in tokens():
+        async with Bot(token) as bot:
+            await bot.set_webhook(url=WEBHOOK_URL, allowed_updates=["message"])
+
+
+async def reply(payload):
+    for token in tokens():
+        try:
+            async with Bot(token) as bot:
+                update = Update.de_json(payload, bot)
+                message = update.effective_message if update else None
+                if message is None:
+                    return
+                await message.reply_text(TEXT, parse_mode="HTML", reply_markup=KEYBOARD)
+                return
+        except TelegramError as error:
+            print(f"Bot {token.split(':', 1)[0]}: {error}")
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self._json(200, {"ok": True})
+        if not tokens():
+            self._json(500, {"ok": False, "error": "BOT_TOKEN kosong"})
+            return
+        try:
+            asyncio.run(register_webhooks())
+        except TelegramError as error:
+            self._json(500, {"ok": False, "error": str(error)})
+            return
+        self._json(200, {"ok": True, "bots": len(tokens())})
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length) if length else b"{}"
         try:
-            update = json.loads(raw.decode() or "{}")
+            payload = json.loads(raw.decode() or "{}")
         except json.JSONDecodeError:
-            update = {}
-
-        chat_id = (update.get("message") or {}).get("chat", {}).get("id")
-        if chat_id:
-            for token in tokens():
-                try:
-                    if send(token, chat_id):
-                        break
-                except (URLError, TimeoutError, json.JSONDecodeError):
-                    continue
-
+            payload = {}
+        try:
+            asyncio.run(reply(payload))
+        except Exception as error:
+            print(error)
         self._json(200, {"ok": True})
 
     def _json(self, status, body):

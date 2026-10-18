@@ -1,21 +1,10 @@
-import json
+import asyncio
 import os
-import threading
-import time
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
-TEXT = (
-    "<b>Pemberitahuan layanan</b>\n\n"
-    "Bot ini akan diistirahatkan.\n"
-    "Silakan melanjutkan melalui bot baru dengan menekan tombol di bawah.\n\n"
-    "Seluruh data Anda telah dipindahkan secara otomatis."
-)
-BUTTON = {
-    "inline_keyboard": [
-        [{"text": "Buka bot baru", "url": "https://t.me/tgXapp_bot?start=hallo"}]
-    ]
-}
+from telegram import Bot
+from telegram.error import TelegramError
+
+from api.telegram import KEYBOARD, TEXT
 
 
 def load_env():
@@ -31,68 +20,43 @@ def load_env():
             os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
-def bot_tokens():
-    raw = os.environ.get("BOT_TOKEN", "")
-    tokens = [part.strip() for part in raw.split(",") if part.strip()]
-    if not tokens:
+def tokens():
+    found = [part.strip() for part in os.environ.get("BOT_TOKEN", "").split(",") if part.strip()]
+    if not found:
         raise SystemExit("Isi BOT_TOKEN di file .env. Beberapa token dipisah dengan koma.")
-    return tokens
+    return found
 
 
-def call(token, method, payload=None, timeout=40):
-    data = None if payload is None else json.dumps(payload).encode()
-    request = Request(
-        f"https://api.telegram.org/bot{token}/{method}",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode())
-
-
-def listen(token):
+async def listen(token):
     label = token.split(":", 1)[0]
-    offset = None
     print(f"Bot {label} menyala. Menunggu pesan...")
-
-    while True:
-        try:
-            updates = call(
-                token,
-                "getUpdates",
-                {"timeout": 30, "offset": offset, "allowed_updates": ["message"]},
-            )
-            for update in updates.get("result", []):
-                offset = update["update_id"] + 1
-                chat_id = (update.get("message") or {}).get("chat", {}).get("id")
-                if not chat_id:
-                    continue
-                call(
-                    token,
-                    "sendMessage",
-                    {
-                        "chat_id": chat_id,
-                        "text": TEXT,
-                        "parse_mode": "HTML",
-                        "reply_markup": BUTTON,
-                    },
+    offset = None
+    async with Bot(token) as bot:
+        while True:
+            try:
+                updates = await bot.get_updates(
+                    timeout=30,
+                    offset=offset,
+                    allowed_updates=["message"],
                 )
-        except (URLError, TimeoutError, json.JSONDecodeError) as error:
-            print(f"Bot {label}: {error}")
-            time.sleep(3)
+                for update in updates:
+                    offset = update.update_id + 1
+                    if update.effective_message is None:
+                        continue
+                    await update.effective_message.reply_text(
+                        TEXT,
+                        parse_mode="HTML",
+                        reply_markup=KEYBOARD,
+                    )
+            except (TelegramError, TimeoutError) as error:
+                print(f"Bot {label}: {error}")
+                await asyncio.sleep(3)
 
 
-def main():
+async def main():
     load_env()
-    threads = []
-    for token in bot_tokens():
-        thread = threading.Thread(target=listen, args=(token,), daemon=True)
-        thread.start()
-        threads.append(thread)
-
-    for thread in threads:
-        thread.join()
+    await asyncio.gather(*(listen(token) for token in tokens()))
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
