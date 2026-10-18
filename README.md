@@ -1,12 +1,12 @@
 # move0bot
 
-Setiap ada pesan masuk, bot membalas bahwa bot ini diistirahatkan, plus tombol ke bot baru. Balasan dikirim lewat library [python-telegram-bot](https://pypi.org/project/python-telegram-bot/).
+Setiap ada pesan masuk, bot membalas bahwa bot ini diistirahatkan, plus tombol ke bot baru.
 
-1. Di Vercel, isi `BOT_TOKEN` pada environment Production. Untuk beberapa bot, pisahkan token dengan koma, lalu redeploy.
-2. Setelah deployment berstatus Ready, buka sekali:
+1. Salin `.env.example` menjadi `.env`, lalu isi `BOT_TOKEN`. Untuk beberapa bot, pisahkan token dengan koma.
+2. Jalankan:
 
+```bash
+python bot.py
 ```
-https://move-omega-one.vercel.app/api/telegram
-```
 
-Kalau muncul `{"ok":true,"bots":1}`, kirim `/start` ke bot.
+Biarkan jendela itu tetap terbuka. Selama skrip menyala, setiap pesan langsung dibalas.

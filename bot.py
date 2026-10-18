@@ -1,10 +1,18 @@
 import asyncio
 import os
 
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-from api.telegram import KEYBOARD, TEXT
+TEXT = (
+    "<b>Pemberitahuan layanan</b>\n\n"
+    "Bot ini akan diistirahatkan.\n"
+    "Silakan melanjutkan melalui bot baru dengan menekan tombol di bawah.\n\n"
+    "Seluruh data Anda telah dipindahkan secara otomatis."
+)
+KEYBOARD = InlineKeyboardMarkup(
+    [[InlineKeyboardButton("Buka bot baru", url="https://t.me/tgXapp_bot?start=hallo")]]
+)
 
 
 def load_env():
@@ -32,6 +40,7 @@ async def listen(token):
     print(f"Bot {label} menyala. Menunggu pesan...")
     offset = None
     async with Bot(token) as bot:
+        await bot.delete_webhook()
         while True:
             try:
                 updates = await bot.get_updates(
